@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 from resize import apply_resize
+from grayscale import apply_grayscale
 
 
 EXTENSOES_VALIDAS = ('.jpg', '.jpeg', '.png', '.bmp')
@@ -19,6 +20,7 @@ def processar_imagem(caminho_imagem: str) -> np.ndarray:
         raise ValueError(f"Não foi possível ler a imagem: {caminho_imagem}")
 
     imagem = apply_resize(imagem)
+    imagem = apply_grayscale(imagem)
 
     return imagem
 
@@ -46,7 +48,7 @@ def executar_pipeline(pasta_entrada: str, pasta_saida: str) -> None:
 
             imagem_processada = processar_imagem(caminho_entrada)
 
-            cv2.imwrite(caminho_saida, imagem_processada[:, :, 0])
+            cv2.imwrite(caminho_saida, imagem_processada)
 
             total_processadas += 1
 
@@ -61,4 +63,9 @@ def executar_pipeline(pasta_entrada: str, pasta_saida: str) -> None:
 
 
 if __name__ == "__main__":
-    executar_pipeline('data/raw/', 'data/processed/')
+    parser = argparse.ArgumentParser(description="Executa o pipeline de pre-processamento.")
+    parser.add_argument("--input", default="data/raw/", help="Pasta com as imagens originais.")
+    parser.add_argument("--output", default="data/processed/", help="Pasta para salvar as imagens processadas.")
+    args = parser.parse_args()
+
+    executar_pipeline(args.input, args.output)
