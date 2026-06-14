@@ -1,58 +1,71 @@
-"""
-resize.py — Redimensionamento de imagens para 96x96 pixels
-Responsável: Kaiki Andrade Silva
-Branch: branch/kaiki-resize
-
-Descrição:
-    Recebe uma imagem no formato NumPy array (BGR ou RGB) em qualquer
-    resolução e retorna a imagem redimensionada para 96x96 pixels,
-    mantendo a compatibilidade com o pipeline de pré-processamento
-    para TinyML no ESP32-CAM.
-"""
+from collections.abc import Iterable
 
 import cv2
 import numpy as np
 
-# Resolução alvo definida pelo projeto
 TARGET_SIZE = (96, 96)
+DEFAULT_PADDING_VALUE = 0
+
+def select_interpolation(
+    original_size: tuple[int, int],
+    resized_size: tuple[int, int],
+) -> int:
+    original_width, original_height = original_size
+    resized_width, resized_height = resized_size
+
+    if resized_width < original_width or resized_height < original_height:
+        return cv2.INTER_AREA
+
+    return cv2.INTER_CUBIC
+
+
+def padding_value(image: np.ndarray) -> int | tuple[int, ...]:
+    if image.ndim == 2:
+        return DEFAULT_PADDING_VALUE
+
+    channels = image.shape[2]
+    if channels == 1:
+        return DEFAULT_PADDING_VALUE
+
+    return tuple([DEFAULT_PADDING_VALUE] * channels)
 
 
 def apply_resize(image: np.ndarray) -> np.ndarray:
-    """
-    Redimensiona uma imagem para 96x96 pixels.
+    target_width, target_height = TARGET_SIZE
+    original_height, original_width = image.shape[:2]
 
-    Utiliza interpolação bilinear (cv2.INTER_LINEAR), que oferece
-    boa qualidade para redução de resolução com custo computacional
-    baixo — adequado ao volume de imagens do dataset.
+    scale = min(target_width / original_width, target_height / original_height)
+    resized_width = max(1, int(round(original_width * scale)))
+    resized_height = max(1, int(round(original_height * scale)))
 
-    Parâmetros:
-        image (np.ndarray): Imagem de entrada em qualquer resolução.
-                            Pode ser RGB ou BGR, com 1 ou 3 canais.
+    interpolation = select_interpolation(
+        (original_width, original_height),
+        (resized_width, resized_height),
+    )
 
-    Retorna:
-        np.ndarray: Imagem redimensionada para (96, 96, C),
-                    onde C é o número de canais da imagem original.
+    resized = cv2.resize(
+        image,
+        (resized_width, resized_height),
+        interpolation=interpolation,
+    )
 
-    Exceções:
-        ValueError: Se a entrada não for um np.ndarray válido.
-        ValueError: Se a imagem estiver vazia ou corrompida.
+    if resized.ndim == 2:
+        canvas_shape = (target_height, target_width)
+    else:
+        canvas_shape = (target_height, target_width, resized.shape[2])
 
-    Exemplo de uso:
-        import cv2
-        from preprocessing.resize import apply_resize
+    canvas = np.full(
+        canvas_shape,
+        padding_value(image),
+        dtype=image.dtype,
+    )
 
-        img = cv2.imread('data/raw/rock/imagem_001.jpg')
-        img_resized = apply_resize(img)
-        print(img_resized.shape)  # (96, 96, 3)
-    """
-    if not isinstance(image, np.ndarray):
-        raise ValueError(
-            f"Esperado np.ndarray, recebido {type(image).__name__}."
-        )
+    offset_x = (target_width - resized_width) // 2
+    offset_y = (target_height - resized_height) // 2
+    canvas[
+        offset_y:offset_y + resized_height,
+        offset_x:offset_x + resized_width,
+    ] = resized
 
-    if image.size == 0:
-        raise ValueError("A imagem recebida está vazia ou corrompida.")
+    return canvas
 
-    resized = cv2.resize(image, TARGET_SIZE, interpolation=cv2.INTER_LINEAR)
-
-    return resized
