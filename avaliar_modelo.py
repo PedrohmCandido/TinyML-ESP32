@@ -32,15 +32,16 @@ from tensorflow import keras
 # ---------------------------------------------------------------------
 # Caminhos (ajuste aqui se a sua estrutura for diferente)
 # ---------------------------------------------------------------------
-PASTA_TESTE = "data/processed/test-processado"
+PASTA_TESTE = "data/processed/rps-real/test"
 CAMINHO_H5 = "models/final/modelo_gestos.h5"
 CAMINHO_TFLITE = "models/final/modelo_gestos.tflite"
 PASTA_RESULTADOS = "resultados"
 LIMIAR_FIRMWARE = 0.70  # mesmo valor usado no inferencia_gestos.ino
 
 
-def verificar_caminhos() -> None:
-    faltando = [c for c in (PASTA_TESTE, CAMINHO_H5, CAMINHO_TFLITE)
+def verificar_caminhos() -> bool:
+    """Confere os caminhos. Retorna True se o .tflite estiver disponivel."""
+    faltando = [c for c in (PASTA_TESTE, CAMINHO_H5)
                 if not os.path.exists(c)]
     if faltando:
         print("[ERRO] Nao encontrei estes caminhos:")
@@ -50,6 +51,13 @@ def verificar_caminhos() -> None:
         print("       pasta de onde voce executa o train.py), ou ajuste as")
         print("       constantes no topo deste arquivo.")
         sys.exit(1)
+
+    tem_tflite = os.path.exists(CAMINHO_TFLITE)
+    if not tem_tflite:
+        print(f"[AVISO] {CAMINHO_TFLITE} nao encontrado.")
+        print("        Avaliando apenas o modelo Keras (.h5).")
+        print("        Rode 'python convert.py' para incluir o TFLite.\n")
+    return tem_tflite
 
 
 def carregar_teste():
@@ -145,7 +153,7 @@ def salvar_figura(matriz, classes, nome_modelo, caminho):
 
 
 def main() -> None:
-    verificar_caminhos()
+    tem_tflite = verificar_caminhos()
     os.makedirs(PASTA_RESULTADOS, exist_ok=True)
 
     try:
@@ -187,83 +195,92 @@ def main() -> None:
     registrar("\nMatriz de confusao:")
     registrar(matriz_texto(mat_k, classes))
 
-    # ---------------- TFLite ----------------
-    registrar("\n" + "-" * 66)
-    registrar("MODELO TFLITE (.tflite) — o que roda no ESP32")
-    registrar("-" * 66)
-
-    probs_t, det_ent, det_sai = prever_tflite(ds)
-    y_t = np.argmax(probs_t, axis=1)
-    acc_t = (y_t == y_true).mean()
-
-    registrar(f"\nEntrada: shape={det_ent['shape']} dtype={det_ent['dtype'].__name__}")
-    registrar(f"Saida  : shape={det_sai['shape']} dtype={det_sai['dtype'].__name__}")
-    registrar(f"Tamanho do arquivo: {os.path.getsize(CAMINHO_TFLITE):,} bytes")
-    registrar(f"\nAcuracia: {acc_t:.4f}  ({acc_t * 100:.2f}%)")
-    mat_t = confusion_matrix(y_true, y_t)
-    registrar("\nMatriz de confusao:")
-    registrar(matriz_texto(mat_t, classes))
-    registrar("\nRelatorio por classe:")
-    registrar(classification_report(y_true, y_t, target_names=classes, digits=4))
-
-    # ---------------- Impacto da quantizacao ----------------
-    registrar("-" * 66)
-    registrar("IMPACTO DA QUANTIZACAO")
-    registrar("-" * 66)
-
-    # Se o .tflite for mais antigo que o .h5, ele veio de OUTRO treino e a
-    # comparacao entre os dois nao mede quantizacao nenhuma.
-    mtime_h5 = os.path.getmtime(CAMINHO_H5)
-    mtime_tfl = os.path.getmtime(CAMINHO_TFLITE)
-    desatualizado = mtime_tfl < mtime_h5
-
-    if desatualizado:
-        from datetime import datetime
-        fmt = "%d/%m/%Y %H:%M"
-        registrar("\n!! ATENCAO: o .tflite eh MAIS ANTIGO que o .h5.")
-        registrar(f"   .h5     modificado em {datetime.fromtimestamp(mtime_h5):{fmt}}")
-        registrar(f"   .tflite modificado em {datetime.fromtimestamp(mtime_tfl):{fmt}}")
-        registrar("   Os dois arquivos vieram de treinos DIFERENTES, entao a")
-        registrar("   comparacao abaixo NAO mede o efeito da quantizacao.")
-        registrar("   Rode 'python convert.py' e execute este script de novo.")
-
-    delta = (acc_t - acc_k) * 100
-    registrar(f"\n.h5     : {acc_k * 100:.2f}%")
-    registrar(f".tflite : {acc_t * 100:.2f}%")
-    registrar(f"Variacao: {delta:+.2f} pontos percentuais")
-    discordancia = (y_k != y_t).sum()
-    registrar(f"Imagens em que os dois modelos discordam: {discordancia} "
-              f"de {len(y_true)} ({discordancia / len(y_true) * 100:.1f}%)")
-
-    if desatualizado:
-        registrar("\n>> Veredito suspenso: arquivos de treinos diferentes.")
-    elif delta < -3:
-        registrar("\n>> A quantizacao degradou o modelo de forma relevante.")
-        registrar("   Corrigir o representative_dataset do convert.py deve ajudar.")
+    if not tem_tflite:
+        registrar("\n" + "-" * 66)
+        registrar("MODELO TFLITE — nao avaliado")
+        registrar("-" * 66)
+        registrar("\nArquivo .tflite ausente. Rode 'python convert.py'")
+        registrar("e execute este script de novo para comparar os dois")
+        registrar("modelos e medir o efeito da quantizacao.")
+        mat_t = None
     else:
-        registrar("\n>> A quantizacao preservou bem a acuracia.")
-        registrar("   O problema em campo nao vem daqui.")
+        # ---------------- TFLite ----------------
+        registrar("\n" + "-" * 66)
+        registrar("MODELO TFLITE (.tflite) — o que roda no ESP32")
+        registrar("-" * 66)
 
-    # ---------------- Confianca e limiar do firmware ----------------
-    registrar("\n" + "-" * 66)
-    registrar(f"CONFIANCA E LIMIAR DE {LIMIAR_FIRMWARE * 100:.0f}% (TFLite)")
-    registrar("-" * 66)
+        probs_t, det_ent, det_sai = prever_tflite(ds)
+        y_t = np.argmax(probs_t, axis=1)
+        acc_t = (y_t == y_true).mean()
 
-    conf = probs_t.max(axis=1)
-    acima = conf > LIMIAR_FIRMWARE
-    registrar(f"\nConfianca media : {conf.mean() * 100:.2f}%")
-    registrar(f"Confianca mediana: {np.median(conf) * 100:.2f}%")
-    registrar(f"Predicoes acima do limiar: {acima.sum()} de {len(conf)} "
-              f"({acima.mean() * 100:.1f}%)")
+        registrar(f"\nEntrada: shape={det_ent['shape']} dtype={det_ent['dtype'].__name__}")
+        registrar(f"Saida  : shape={det_sai['shape']} dtype={det_sai['dtype'].__name__}")
+        registrar(f"Tamanho do arquivo: {os.path.getsize(CAMINHO_TFLITE):,} bytes")
+        registrar(f"\nAcuracia: {acc_t:.4f}  ({acc_t * 100:.2f}%)")
+        mat_t = confusion_matrix(y_true, y_t)
+        registrar("\nMatriz de confusao:")
+        registrar(matriz_texto(mat_t, classes))
+        registrar("\nRelatorio por classe:")
+        registrar(classification_report(y_true, y_t, target_names=classes, digits=4))
 
-    if acima.sum():
-        acc_acima = (y_t[acima] == y_true[acima]).mean()
-        registrar(f"Acuracia SO nas predicoes acima do limiar: {acc_acima * 100:.2f}%")
-    erradas_confiantes = ((y_t != y_true) & acima).sum()
-    registrar(f"Erros COM alta confianca (>{LIMIAR_FIRMWARE * 100:.0f}%): "
-              f"{erradas_confiantes}")
-    registrar("   (este numero mostra o quanto o limiar do firmware NAO"
-              " protege contra erros confiantes)")
+        # ---------------- Impacto da quantizacao ----------------
+        registrar("-" * 66)
+        registrar("IMPACTO DA QUANTIZACAO")
+        registrar("-" * 66)
+
+        # Se o .tflite for mais antigo que o .h5, ele veio de OUTRO treino e a
+        # comparacao entre os dois nao mede quantizacao nenhuma.
+        mtime_h5 = os.path.getmtime(CAMINHO_H5)
+        mtime_tfl = os.path.getmtime(CAMINHO_TFLITE)
+        desatualizado = mtime_tfl < mtime_h5
+
+        if desatualizado:
+            from datetime import datetime
+            fmt = "%d/%m/%Y %H:%M"
+            registrar("\n!! ATENCAO: o .tflite eh MAIS ANTIGO que o .h5.")
+            registrar(f"   .h5     modificado em {datetime.fromtimestamp(mtime_h5):{fmt}}")
+            registrar(f"   .tflite modificado em {datetime.fromtimestamp(mtime_tfl):{fmt}}")
+            registrar("   Os dois arquivos vieram de treinos DIFERENTES, entao a")
+            registrar("   comparacao abaixo NAO mede o efeito da quantizacao.")
+            registrar("   Rode 'python convert.py' e execute este script de novo.")
+
+        delta = (acc_t - acc_k) * 100
+        registrar(f"\n.h5     : {acc_k * 100:.2f}%")
+        registrar(f".tflite : {acc_t * 100:.2f}%")
+        registrar(f"Variacao: {delta:+.2f} pontos percentuais")
+        discordancia = (y_k != y_t).sum()
+        registrar(f"Imagens em que os dois modelos discordam: {discordancia} "
+                  f"de {len(y_true)} ({discordancia / len(y_true) * 100:.1f}%)")
+
+        if desatualizado:
+            registrar("\n>> Veredito suspenso: arquivos de treinos diferentes.")
+        elif delta < -3:
+            registrar("\n>> A quantizacao degradou o modelo de forma relevante.")
+            registrar("   Corrigir o representative_dataset do convert.py deve ajudar.")
+        else:
+            registrar("\n>> A quantizacao preservou bem a acuracia.")
+            registrar("   O problema em campo nao vem daqui.")
+
+        # ---------------- Confianca e limiar do firmware ----------------
+        registrar("\n" + "-" * 66)
+        registrar(f"CONFIANCA E LIMIAR DE {LIMIAR_FIRMWARE * 100:.0f}% (TFLite)")
+        registrar("-" * 66)
+
+        conf = probs_t.max(axis=1)
+        acima = conf > LIMIAR_FIRMWARE
+        registrar(f"\nConfianca media : {conf.mean() * 100:.2f}%")
+        registrar(f"Confianca mediana: {np.median(conf) * 100:.2f}%")
+        registrar(f"Predicoes acima do limiar: {acima.sum()} de {len(conf)} "
+                  f"({acima.mean() * 100:.1f}%)")
+
+        if acima.sum():
+            acc_acima = (y_t[acima] == y_true[acima]).mean()
+            registrar(f"Acuracia SO nas predicoes acima do limiar: {acc_acima * 100:.2f}%")
+        erradas_confiantes = ((y_t != y_true) & acima).sum()
+        registrar(f"Erros COM alta confianca (>{LIMIAR_FIRMWARE * 100:.0f}%): "
+                  f"{erradas_confiantes}")
+        registrar("   (este numero mostra o quanto o limiar do firmware NAO"
+                  " protege contra erros confiantes)")
 
     # ---------------- Saidas em disco ----------------
     caminho_txt = os.path.join(PASTA_RESULTADOS, "diagnostico_baseline.txt")
@@ -275,10 +292,14 @@ def main() -> None:
 
     fig_k = salvar_figura(mat_k, classes, "Keras (.h5)",
                           os.path.join(PASTA_RESULTADOS, "confusao_h5.png"))
-    fig_t = salvar_figura(mat_t, classes, "TFLite quantizado",
-                          os.path.join(PASTA_RESULTADOS, "confusao_tflite.png"))
-    if fig_t:
-        print(f"Figuras salvas em : {fig_k} e {fig_t}")
+    fig_t = None
+    if mat_t is not None:
+        fig_t = salvar_figura(mat_t, classes, "TFLite quantizado",
+                              os.path.join(PASTA_RESULTADOS, "confusao_tflite.png"))
+    if fig_k:
+        print(f"Figura salva em   : {fig_k}")
+        if fig_t:
+            print(f"Figura salva em   : {fig_t}")
     else:
         print("(matplotlib nao instalado — figuras nao geradas)")
 

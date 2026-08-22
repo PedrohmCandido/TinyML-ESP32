@@ -6,7 +6,6 @@ from tqdm import tqdm
 from resize import apply_resize
 from grayscale import apply_grayscale
 
-
 EXTENSOES_VALIDAS = ('.jpg', '.jpeg', '.png', '.bmp')
 
 def processar_imagem(caminho_imagem: str) -> np.ndarray:

@@ -2,24 +2,24 @@
 DIAGNOSTICO BASELINE — modelo atual, sem alteracoes
 ==================================================================
 
-Classes (ordem alfabetica do Keras): ['paper-teste-processado', 'rock-teste-processado', 'scissors-test-processado']
-Imagens no conjunto de teste: 372
-   0 = paper-teste-processado 124 imagens
-   1 = rock-teste-processado 124 imagens
-   2 = scissors-test-processado 124 imagens
+Classes (ordem alfabetica do Keras): ['paper', 'rock', 'scissors']
+Imagens no conjunto de teste: 410
+   0 = paper                137 imagens
+   1 = rock                 137 imagens
+   2 = scissors             136 imagens
 
 ------------------------------------------------------------------
 MODELO KERAS (.h5) — o que foi treinado no PC
 ------------------------------------------------------------------
 
 Parametros totais: 996,291
-Acuracia: 0.9301  (93.01%)
+Acuracia: 0.7976  (79.76%)
 
 Matriz de confusao:
-                            paper-te  rock-tes  scissors   <- predito
-paper-teste-processado           124         0         0    (100.0% correto)
-rock-teste-processado              0       115         9    (92.7% correto)
-scissors-test-processado          16         1       107    (86.3% correto)
+               paper      rock  scissors   <- predito
+paper            107        15        15    (78.1% correto)
+rock               9       121         7    (88.3% correto)
+scissors          24        13        99    (72.8% correto)
 
 ------------------------------------------------------------------
 MODELO TFLITE (.tflite) — o que roda no ESP32
@@ -29,33 +29,33 @@ Entrada: shape=[ 1 96 96  1] dtype=float32
 Saida  : shape=[1 3] dtype=float32
 Tamanho do arquivo: 1,002,144 bytes
 
-Acuracia: 0.9301  (93.01%)
+Acuracia: 0.7927  (79.27%)
 
 Matriz de confusao:
-                            paper-te  rock-tes  scissors   <- predito
-paper-teste-processado           124         0         0    (100.0% correto)
-rock-teste-processado              0       115         9    (92.7% correto)
-scissors-test-processado          16         1       107    (86.3% correto)
+               paper      rock  scissors   <- predito
+paper            105        15        17    (76.6% correto)
+rock               9       121         7    (88.3% correto)
+scissors          24        13        99    (72.8% correto)
 
 Relatorio por classe:
-                          precision    recall  f1-score   support
+              precision    recall  f1-score   support
 
-  paper-teste-processado     0.8857    1.0000    0.9394       124
-   rock-teste-processado     0.9914    0.9274    0.9583       124
-scissors-test-processado     0.9224    0.8629    0.8917       124
+       paper     0.7609    0.7664    0.7636       137
+        rock     0.8121    0.8832    0.8462       137
+    scissors     0.8049    0.7279    0.7645       136
 
-                accuracy                         0.9301       372
-               macro avg     0.9332    0.9301    0.9298       372
-            weighted avg     0.9332    0.9301    0.9298       372
+    accuracy                         0.7927       410
+   macro avg     0.7926    0.7925    0.7914       410
+weighted avg     0.7926    0.7927    0.7915       410
 
 ------------------------------------------------------------------
 IMPACTO DA QUANTIZACAO
 ------------------------------------------------------------------
 
-.h5     : 93.01%
-.tflite : 93.01%
-Variacao: +0.00 pontos percentuais
-Imagens em que os dois modelos discordam: 0 de 372 (0.0%)
+.h5     : 79.76%
+.tflite : 79.27%
+Variacao: -0.49 pontos percentuais
+Imagens em que os dois modelos discordam: 4 de 410 (1.0%)
 
 >> A quantizacao preservou bem a acuracia.
    O problema em campo nao vem daqui.
@@ -64,9 +64,9 @@ Imagens em que os dois modelos discordam: 0 de 372 (0.0%)
 CONFIANCA E LIMIAR DE 70% (TFLite)
 ------------------------------------------------------------------
 
-Confianca media : 97.73%
-Confianca mediana: 99.61%
-Predicoes acima do limiar: 366 de 372 (98.4%)
-Acuracia SO nas predicoes acima do limiar: 93.72%
-Erros COM alta confianca (>70%): 23
+Confianca media : 78.54%
+Confianca mediana: 82.62%
+Predicoes acima do limiar: 276 de 410 (67.3%)
+Acuracia SO nas predicoes acima do limiar: 89.13%
+Erros COM alta confianca (>70%): 30
    (este numero mostra o quanto o limiar do firmware NAO protege contra erros confiantes)

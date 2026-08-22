@@ -1,0 +1,8 @@
+Divisao do dataset (semente=42)
+Proporcao alvo: treino=0.70 val=0.15 teste=0.15
+
+classe           total   train     val    test
+paper              907     634     136     137
+rock               907     634     136     137
+scissors           903     632     135     136
+TOTAL             2717    1900     407     410
