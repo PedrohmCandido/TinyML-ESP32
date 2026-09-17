@@ -29,15 +29,11 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-# ---------------------------------------------------------------------
-# Caminhos (ajuste aqui se a sua estrutura for diferente)
-# ---------------------------------------------------------------------
 PASTA_TESTE = "data/processed/rps-real/test"
 CAMINHO_H5 = "models/final/modelo_gestos.h5"
 CAMINHO_TFLITE = "models/final/modelo_gestos.tflite"
 PASTA_RESULTADOS = "resultados"
-LIMIAR_FIRMWARE = 0.70  # mesmo valor usado no inferencia_gestos.ino
-
+LIMIAR_FIRMWARE = 0.70  
 
 def verificar_caminhos() -> bool:
     """Confere os caminhos. Retorna True se o .tflite estiver disponivel."""
@@ -61,11 +57,6 @@ def verificar_caminhos() -> bool:
 
 
 def carregar_teste():
-    """Carrega o conjunto de teste SEM embaralhar.
-
-    O shuffle=False eh obrigatorio: sem ele, os rotulos lidos numa
-    passagem nao corresponderiam as predicoes feitas em outra.
-    """
     ds = keras.utils.image_dataset_from_directory(
         PASTA_TESTE,
         image_size=(96, 96),
@@ -73,7 +64,6 @@ def carregar_teste():
         shuffle=False,
     )
     classes = ds.class_names
-    # Mesma normalizacao usada no treino.
     ds = ds.map(lambda x, y: (keras.layers.Rescaling(1. / 255)(x), y))
     return ds, classes
 
@@ -180,7 +170,6 @@ def main() -> None:
     for i, c in enumerate(classes):
         registrar(f"   {i} = {c:<20} {(y_true == i).sum()} imagens")
 
-    # ---------------- Keras (.h5) ----------------
     registrar("\n" + "-" * 66)
     registrar("MODELO KERAS (.h5) — o que foi treinado no PC")
     registrar("-" * 66)
@@ -204,7 +193,6 @@ def main() -> None:
         registrar("modelos e medir o efeito da quantizacao.")
         mat_t = None
     else:
-        # ---------------- TFLite ----------------
         registrar("\n" + "-" * 66)
         registrar("MODELO TFLITE (.tflite) — o que roda no ESP32")
         registrar("-" * 66)
@@ -223,13 +211,10 @@ def main() -> None:
         registrar("\nRelatorio por classe:")
         registrar(classification_report(y_true, y_t, target_names=classes, digits=4))
 
-        # ---------------- Impacto da quantizacao ----------------
         registrar("-" * 66)
         registrar("IMPACTO DA QUANTIZACAO")
         registrar("-" * 66)
 
-        # Se o .tflite for mais antigo que o .h5, ele veio de OUTRO treino e a
-        # comparacao entre os dois nao mede quantizacao nenhuma.
         mtime_h5 = os.path.getmtime(CAMINHO_H5)
         mtime_tfl = os.path.getmtime(CAMINHO_TFLITE)
         desatualizado = mtime_tfl < mtime_h5
@@ -261,7 +246,6 @@ def main() -> None:
             registrar("\n>> A quantizacao preservou bem a acuracia.")
             registrar("   O problema em campo nao vem daqui.")
 
-        # ---------------- Confianca e limiar do firmware ----------------
         registrar("\n" + "-" * 66)
         registrar(f"CONFIANCA E LIMIAR DE {LIMIAR_FIRMWARE * 100:.0f}% (TFLite)")
         registrar("-" * 66)
@@ -282,7 +266,6 @@ def main() -> None:
         registrar("   (este numero mostra o quanto o limiar do firmware NAO"
                   " protege contra erros confiantes)")
 
-    # ---------------- Saidas em disco ----------------
     caminho_txt = os.path.join(PASTA_RESULTADOS, "diagnostico_baseline.txt")
     with open(caminho_txt, "w", encoding="utf-8") as f:
         f.write("\n".join(relatorio) + "\n")
