@@ -22,20 +22,11 @@
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
-// ---- Streaming da imagem para visualizacao/debug via Python ----
-// 1 = envia cada frame capturado pela Serial (para o script de visualizacao)
-// 0 = desativa (usar durante a MEDICAO DE FPS, pois transmitir 9.216
-//     bytes por quadro afeta a taxa do ciclo completo)
+
 #define ENVIAR_IMAGEM_SERIAL 0
 
-// ---- Coleta de metricas para o artigo ----
-// 1 = mede latencia de inferencia, consumo da arena e taxa de quadros
-// 0 = desativa toda a instrumentacao (volta ao firmware original)
 #define MEDIR_METRICAS 1
 
-// Pausa entre inferencias. Existe apenas para o log serial ficar legivel
-// e NAO representa o limite de desempenho do dispositivo.
-// Durante a medicao de FPS este valor deve ser 0.
 #define DELAY_LOOP_MS 0
 
 const char* CLASSES[] = {"paper", "rock", "scissors"};
@@ -50,21 +41,17 @@ TfLiteTensor* input = nullptr;
 TfLiteTensor* output = nullptr;
 
 #if MEDIR_METRICAS
-// Acumuladores das estatisticas. unsigned long porque micros() retorna
-// esse tipo e o valor acumulado cresce rapidamente.
-unsigned long soma_latencia_us  = 0;   // soma do tempo de Invoke()
+unsigned long soma_latencia_us  = 0;   
 unsigned long min_latencia_us   = 4294967295UL;
 unsigned long max_latencia_us   = 0;
-unsigned long soma_ciclo_us     = 0;   // soma do loop() completo
+unsigned long soma_ciclo_us     = 0;   
 unsigned long total_inferencias = 0;
 
-// A cada quantas inferencias o resumo eh impresso.
+
 const int INTERVALO_RELATORIO = 20;
 #endif
 
 #if ENVIAR_IMAGEM_SERIAL
-// Marcador de sincronizacao: sequencia improvavel de aparecer em texto ASCII normal,
-// usada pelo script Python para saber onde comeca cada frame binario.
 const uint8_t MARCADOR_FRAME[4] = {0xAA, 0x55, 0xAA, 0x55};
 
 void enviar_frame_serial(camera_fb_t* fb) {
@@ -139,9 +126,6 @@ void setup() {
   Serial.println("Modelo carregado com sucesso!");
 
 #if MEDIR_METRICAS
-  // O consumo da arena so fica disponivel APOS o AllocateTensors(),
-  // que eh quem planeja o uso da memoria. A diferenca entre alocado e
-  // utilizado mostra a margem de seguranca adotada.
   size_t arena_usada = interpreter->arena_used_bytes();
   Serial.println();
   Serial.println(F("=== CONSUMO DE MEMORIA ==="));
@@ -184,9 +168,6 @@ void loop() {
   esp_camera_fb_return(fb);
 
 #if MEDIR_METRICAS
-  // Mede exclusivamente o Invoke(), sem captura nem normalizacao.
-  // Corresponde a definicao usual de "tempo de inferencia" na
-  // literatura de TinyML, permitindo comparacao com outros trabalhos.
   unsigned long t_inicio = micros();
   interpreter->Invoke();
   unsigned long latencia_us = micros() - t_inicio;
@@ -240,8 +221,6 @@ void loop() {
     Serial.print(F("Latencia maxima     : "));
     Serial.print(max_latencia_us / 1000.0f, 2);
     Serial.println(F(" ms"));
-    // Limite superior teorico: quantas inferencias caberiam em 1 s se o
-    // dispositivo executasse APENAS o Invoke(). Nao eh a taxa observada.
     Serial.print(F("Limite teorico      : "));
     Serial.print(1000000.0f / media_lat, 1);
     Serial.println(F(" inferencias/s"));
@@ -251,7 +230,7 @@ void loop() {
     Serial.println(F(" ms"));
     Serial.print(F("FPS do sistema      : "));
     Serial.println(1000000.0f / media_ciclo, 1);
-    // Avisos para nao se reportar um numero enganoso no artigo.
+
     if (DELAY_LOOP_MS > 0) {
       Serial.print(F("AVISO: delay de "));
       Serial.print(DELAY_LOOP_MS);
