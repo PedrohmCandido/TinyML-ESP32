@@ -1,39 +1,3 @@
-"""
-dividir_dataset.py
-
-Divide um dataset organizado em pastas por classe (sem divisao previa)
-em tres particoes: treino, validacao e teste.
-
-Motivacao: o dataset DrGFreeman traz apenas tres pastas ('rock',
-'paper', 'scissors') sem separacao. Precisamos de tres particoes
-distintas para que o early stopping use a validacao e o teste seja
-tocado apenas na avaliacao final, evitando o vazamento de selecao que
-existia no pipeline anterior (onde o teste servia tambem de validacao).
-
-Caracteristicas:
-  - Estratificado: cada classe eh dividida na mesma proporcao, de modo
-    que as tres particoes fiquem balanceadas.
-  - Reproduzivel: com a mesma semente, a divisao eh sempre identica.
-  - Nao destrutivo: os arquivos sao COPIADOS, o dataset original
-    permanece intacto.
-
-Estrutura esperada na entrada:
-    <ENTRADA>/
-    ├── paper/
-    ├── rock/
-    └── scissors/
-
-Estrutura gerada na saida:
-    <SAIDA>/
-    ├── train/{paper,rock,scissors}/
-    ├── val/{paper,rock,scissors}/
-    └── test/{paper,rock,scissors}/
-
-Uso:
-    python dividir_dataset.py --input data/raw/rps-real-original \
-                              --output data/raw/rps-real
-"""
-
 import argparse
 import os
 import random
@@ -44,12 +8,6 @@ EXTENSOES_VALIDAS = (".jpg", ".jpeg", ".png", ".bmp")
 
 
 def listar_classes(pasta_entrada: str) -> list[str]:
-    """Retorna as subpastas (classes) em ordem alfabetica.
-
-    A ordem alfabetica importa: eh a mesma que o Keras usa para atribuir
-    os indices 0, 1, 2 -- e esses indices precisam corresponder ao vetor
-    CLASSES[] do firmware.
-    """
     if not os.path.isdir(pasta_entrada):
         print(f"[ERRO] Pasta de entrada nao encontrada: {pasta_entrada}")
         sys.exit(1)
@@ -93,14 +51,11 @@ def dividir(
             print(f"[AVISO] Nenhuma imagem em '{nome_classe}', pulando.")
             continue
 
-        # Embaralha com semente fixa: mesma entrada -> mesma divisao.
         rng.shuffle(imagens)
 
         total = len(imagens)
         n_treino = int(total * prop_treino)
         n_val = int(total * prop_val)
-        # O teste recebe o resto, garantindo que nenhuma imagem se perca
-        # por arredondamento.
         particoes = {
             "train": imagens[:n_treino],
             "val": imagens[n_treino:n_treino + n_val],
@@ -128,7 +83,6 @@ def dividir(
               f"val={len(particoes['val']):<5} "
               f"test={len(particoes['test'])}")
 
-    # ---- Resumo final ----
     tot = {k: sum(r[k] for r in resumo) for k in ("total", "train", "val", "test")}
     print("\n" + "-" * 52)
     print(f"  {'TOTAL':<12} total={tot['total']:<6} "
@@ -141,7 +95,6 @@ def dividir(
     print(f"Saida gerada em: {pasta_saida}")
     print(f"Semente usada: {semente} (guarde este valor para reproduzir)")
 
-    # Grava o resumo em disco, para citar no artigo sem depender da memoria.
     caminho_resumo = os.path.join(pasta_saida, "divisao_resumo.txt")
     with open(caminho_resumo, "w", encoding="utf-8") as f:
         f.write(f"Divisao do dataset (semente={semente})\n")
