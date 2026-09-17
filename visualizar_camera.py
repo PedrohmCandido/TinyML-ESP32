@@ -39,30 +39,22 @@ MARCADOR = bytes([0xAA, 0x55, 0xAA, 0x55])
 LARGURA = 96
 ALTURA = 96
 TAMANHO_FRAME = LARGURA * ALTURA
-FATOR_ZOOM = 5          # amplia a exibicao (96px eh muito pequeno na tela)
-ALTURA_LEGENDA = 70     # faixa abaixo da imagem onde a legenda eh desenhada
+FATOR_ZOOM = 5          
+ALTURA_LEGENDA = 70     
 PASTA_CAPTURAS = "capturas"
 
-# "Gesto: rock | Confianca: 99.61%" -> captura "rock" e "99.61".
-# O .*? no meio evita depender do acento de "Confianca", que pode chegar
-# como byte invalido dependendo da codificacao do firmware.
 PADRAO_GESTO = re.compile(r"Gesto:\s*(\w+)\s*\|.*?([\d.]+)\s*%")
 PADRAO_SEM_GESTO = re.compile(r"Nenhum gesto detectado")
 
-# Cores em BGR (padrao do OpenCV)
-COR_DETECTADO = (110, 220, 120)   # verde
-COR_SEM_GESTO = (150, 150, 150)   # cinza
-COR_AGUARDANDO = (60, 190, 240)   # ambar
+
+COR_DETECTADO = (110, 220, 120)   
+COR_SEM_GESTO = (150, 150, 150)   
+COR_AGUARDANDO = (60, 190, 240)   
 COR_INFO = (170, 170, 170)
 
 
 def abrir_serial(porta: str, baud: int, timeout: float = 2.0) -> serial.Serial:
     try:
-        # Monta a porta sem abrir ainda, para poder zerar DTR/RTS
-        # ANTES da abertura. Isso evita que o ESP32 seja forcado a
-        # entrar em modo bootloader/gravacao (comportamento de
-        # auto-reset comum em placas com chip CH340/CP2102), que faz
-        # a porta abrir normalmente mas nenhum byte do firmware chegar.
         ser = serial.Serial()
         ser.port = porta
         ser.baudrate = baud
@@ -103,8 +95,6 @@ def processar_linha_texto(linha: str, estado: dict) -> None:
         estado["detectado"] = False
         return
 
-    # Qualquer outra mensagem do firmware (ex.: "Camera inicializada!")
-    # eh apenas ecoada no terminal, sem virar legenda.
     print(f"[ESP32] {linha}")
 
 
@@ -127,15 +117,13 @@ def esperar_marcador(ser: serial.Serial, contadores: dict, estado: dict) -> bool
         if len(contadores["preview"]) > 200:
             contadores["preview"] = contadores["preview"][-200:]
 
-        # Acumula texto ate encontrar uma quebra de linha.
         if byte == b"\n":
             linha = estado["linha"].decode("utf-8", errors="replace")
             estado["linha"] = bytearray()
             processar_linha_texto(linha, estado)
         elif byte != b"\r":
             estado["linha"] += byte
-            # Trava de seguranca: se muitos bytes vierem sem quebra de
-            # linha, provavelmente sao dados binarios e nao texto.
+
             if len(estado["linha"]) > 300:
                 estado["linha"] = bytearray()
 
@@ -143,7 +131,6 @@ def esperar_marcador(ser: serial.Serial, contadores: dict, estado: dict) -> bool
         if len(buffer) > len(MARCADOR):
             buffer.pop(0)
         if bytes(buffer) == MARCADOR:
-            # Descarta texto parcial acumulado imediatamente antes do frame.
             estado["linha"] = bytearray()
             return True
 
@@ -163,20 +150,17 @@ def montar_exibicao(frame: np.ndarray, contador: int, estado: dict) -> np.ndarra
     ampliado = cv2.resize(
         frame, (largura, altura), interpolation=cv2.INTER_NEAREST
     )
-    # Converte para BGR para permitir texto colorido sobre a imagem cinza.
     ampliado = cv2.cvtColor(ampliado, cv2.COLOR_GRAY2BGR)
 
     tela = np.zeros((altura + ALTURA_LEGENDA, largura, 3), dtype=np.uint8)
     tela[:altura] = ampliado
     tela[altura:] = (28, 28, 28)
 
-    # Contador de frames, no canto superior da imagem.
     cv2.putText(
         tela, f"frame {contador}", (8, 20),
         cv2.FONT_HERSHEY_SIMPLEX, 0.45, COR_INFO, 1, cv2.LINE_AA,
     )
 
-    # Faixa de legenda.
     if estado["detectado"] is None:
         texto = "aguardando classificacao..."
         cor = COR_AGUARDANDO
@@ -194,7 +178,6 @@ def montar_exibicao(frame: np.ndarray, contador: int, estado: dict) -> np.ndarra
         cv2.FONT_HERSHEY_SIMPLEX, 0.7, cor, 2, cv2.LINE_AA,
     )
 
-    # Barra de confianca proporcional, so quando ha deteccao.
     if estado["detectado"] and estado["confianca"] is not None:
         largura_util = largura - 24
         preenchido = int(largura_util * min(estado["confianca"], 100.0) / 100.0)
@@ -227,9 +210,6 @@ def main() -> None:
     contador_frames = 0
     ultimo_frame = None
     contadores = {"total_bytes": 0, "preview": bytearray()}
-    # detectado: None = ainda nao chegou classificacao nenhuma
-    #            True = gesto acima do limiar de 70%
-    #            False = firmware reportou "Nenhum gesto detectado"
     estado = {"gesto": None, "confianca": None, "detectado": None,
               "linha": bytearray()}
     ultimo_aviso = time.time()
@@ -237,8 +217,6 @@ def main() -> None:
     try:
         while True:
             if not esperar_marcador(ser, contadores, estado):
-                # timeout esperando o marcador (2s sem novos bytes).
-                # A cada ~4s sem nenhum frame, mostra um diagnostico.
                 if time.time() - ultimo_aviso > 4.0:
                     ultimo_aviso = time.time()
                     if contadores["total_bytes"] == 0:
